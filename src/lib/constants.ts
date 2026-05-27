@@ -3,6 +3,7 @@ import type { Settings } from "./types";
 export const STORAGE_KEYS = {
   settings: "desktop-pet.settings",
   messages: "desktop-pet.messages",
+  windowPosition: "desktop-pet.window-position",
 } as const;
 
 export const DEFAULT_SETTINGS: Settings = {

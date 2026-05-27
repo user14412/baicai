@@ -19,11 +19,19 @@ export type Settings = {
   alwaysOnTop: boolean;
 };
 
+export type WindowPosition = {
+  x: number;
+  y: number;
+};
+
 export type SendChatMessageParams = {
   apiKey: string;
   apiBaseUrl: string;
   model: string;
   personalityPrompt: string;
   messages: ChatMessage[];
-  userInput: string;
+};
+
+export type StreamChatMessageParams = SendChatMessageParams & {
+  onToken: (token: string) => void;
 };

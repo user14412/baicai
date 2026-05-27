@@ -77,14 +77,6 @@ export function ChatPanel({
         {messages.map((message) => (
           <ChatBubble key={message.id} message={message} />
         ))}
-        {isLoading ? (
-          <ChatBubble
-            message={{
-              role: "assistant",
-              content: "输出中...",
-            }}
-          />
-        ) : null}
       </div>
 
       <footer className="chat-input-row">

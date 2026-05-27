@@ -5,7 +5,17 @@ import { Pet } from "./components/Pet";
 import { useChat } from "./hooks/useChat";
 import { usePetState } from "./hooks/usePetState";
 import { useSettings } from "./hooks/useSettings";
-import { applyAlwaysOnTop, closeCurrentWindow } from "./lib/tauri";
+import {
+  applyAlwaysOnTop,
+  closeCurrentWindow,
+  listenWindowMoves,
+  restoreWindowPosition,
+} from "./lib/tauri";
+import {
+  clearWindowPosition,
+  loadWindowPosition,
+  saveWindowPosition,
+} from "./lib/storage";
 
 type MenuPosition = {
   x: number;
@@ -25,6 +35,43 @@ function App() {
   useEffect(() => {
     void applyAlwaysOnTop(settings.alwaysOnTop);
   }, [settings.alwaysOnTop]);
+
+  useEffect(() => {
+    let saveTimer: number | null = null;
+    let unlisten: (() => void) | null = null;
+    let isDisposed = false;
+
+    void restoreWindowPosition(loadWindowPosition()).then((isStoredPositionValid) => {
+      if (!isStoredPositionValid) {
+        clearWindowPosition();
+      }
+    });
+
+    void listenWindowMoves((position) => {
+      if (saveTimer !== null) {
+        window.clearTimeout(saveTimer);
+      }
+
+      saveTimer = window.setTimeout(() => {
+        saveWindowPosition(position);
+      }, 250);
+    }).then((nextUnlisten) => {
+      if (isDisposed) {
+        nextUnlisten?.();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      isDisposed = true;
+      if (saveTimer !== null) {
+        window.clearTimeout(saveTimer);
+      }
+      unlisten?.();
+    };
+  }, []);
 
   const closeMenu = useCallback(() => {
     setMenuPosition(null);

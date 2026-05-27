@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { sendChatMessage } from "../lib/llm";
+import { streamChatMessage } from "../lib/llm";
 import {
   clearMessages as clearStoredMessages,
   loadMessages,
@@ -40,39 +40,63 @@ export function useChat(
         return;
       }
 
-      const previousMessages = messages;
       const userMessage = createMessage("user", userInput);
+      const nextMessages = [...messages, userMessage].slice(-20);
+      const assistantMessage = createMessage("assistant", "正在思考...");
 
-      setMessages((current) => [...current, userMessage].slice(-20));
+      setMessages([...nextMessages, assistantMessage].slice(-20));
       setIsLoading(true);
       setPetState("thinking");
 
       try {
-        const reply = await sendChatMessage({
+        let reply = "";
+        let hasToken = false;
+
+        await streamChatMessage({
           apiKey: settings.apiKey,
           apiBaseUrl: settings.apiBaseUrl,
           model: settings.model,
           personalityPrompt: settings.personalityPrompt,
-          messages: previousMessages,
-          userInput,
+          messages: nextMessages,
+          onToken: (token) => {
+            reply += token;
+
+            if (!hasToken) {
+              hasToken = true;
+              setPetState("talking");
+            }
+
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === assistantMessage.id
+                  ? { ...message, content: reply }
+                  : message,
+              ),
+            );
+          },
         });
 
-        const assistantMessage = createMessage("assistant", reply);
-        setPetState("talking");
-        setMessages((current) => [...current, assistantMessage].slice(-20));
-
-        window.setTimeout(() => {
-          setPetState((current) => (current === "talking" ? "happy" : current));
-        }, 600);
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantMessage.id
+              ? { ...message, content: reply.trim() }
+              : message,
+          ),
+        );
+        setPetState("happy");
 
         window.setTimeout(() => {
           setPetState((current) => (current === "happy" ? "idle" : current));
-        }, 1600);
+        }, 1000);
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "发送失败，请稍后再试。";
         setMessages((current) =>
-          [...current, createMessage("assistant", message)].slice(-20),
+          current.map((chatMessage) =>
+            chatMessage.id === assistantMessage.id
+              ? { ...chatMessage, content: `出错了：${message}` }
+              : chatMessage,
+          ),
         );
         setPetState("idle");
       } finally {

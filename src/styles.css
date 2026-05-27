@@ -483,6 +483,22 @@ button {
   font-weight: 500;
 }
 
+.api-key-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px;
+  gap: 6px;
+}
+
+.api-key-input-row button {
+  min-height: 32px;
+  border-radius: 8px;
+  background: #edf4f0;
+  color: #29463d;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .settings-panel textarea {
   resize: vertical;
 }

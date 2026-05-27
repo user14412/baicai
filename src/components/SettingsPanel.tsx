@@ -13,6 +13,7 @@ export function SettingsPanel({
   onClose,
 }: SettingsPanelProps) {
   const [draft, setDraft] = useState<Settings>(settings);
+  const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
 
   const updateDraft = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setDraft((current) => ({
@@ -71,12 +72,21 @@ export function SettingsPanel({
 
         <label>
           API Key
-          <input
-            autoComplete="off"
-            type="password"
-            value={draft.apiKey}
-            onChange={(event) => updateDraft("apiKey", event.target.value)}
-          />
+          <span className="api-key-input-row">
+            <input
+              autoComplete="off"
+              type={isApiKeyVisible ? "text" : "password"}
+              value={draft.apiKey}
+              onChange={(event) => updateDraft("apiKey", event.target.value)}
+            />
+            <button
+              aria-pressed={isApiKeyVisible}
+              type="button"
+              onClick={() => setIsApiKeyVisible((current) => !current)}
+            >
+              {isApiKeyVisible ? "隐藏" : "显示"}
+            </button>
+          </span>
         </label>
 
         <label>
