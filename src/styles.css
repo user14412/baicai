@@ -69,15 +69,13 @@ button {
   z-index: 1;
   display: grid;
   width: 260px;
-  height: 340px;
+  height: 300px;
   place-items: end center;
   padding: 0;
   background: transparent;
   cursor: grab;
   outline: none;
   touch-action: none;
-  transform-origin: center bottom;
-  animation: pet-float 2.8s ease-in-out infinite;
 }
 
 .pet-model {
@@ -85,13 +83,59 @@ button {
   inset: 0 0 18px;
   display: block;
   pointer-events: none;
-  filter: saturate(1.38) contrast(1.08);
+  filter: saturate(1.6) contrast(1.16) brightness(1.04);
 }
 
 .pet-model canvas {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.mmd-status-cue {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  z-index: 2;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.mmd-status-cue-thinking {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 42px;
+  min-height: 24px;
+  padding: 6px 9px;
+  border: 1px solid rgba(47, 92, 79, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 18px rgba(36, 66, 57, 0.12);
+}
+
+.mmd-status-cue-thinking span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #356f5a;
+  animation: mmd-cue-dot 850ms ease-in-out infinite;
+}
+
+.mmd-status-cue-thinking span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.mmd-status-cue-thinking span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.mmd-status-cue-sleep {
+  color: #4d6471;
+  font-weight: 800;
+  letter-spacing: 0;
+  animation: mmd-cue-sleep 1.8s ease-in-out infinite;
 }
 
 .pet:active {
@@ -108,81 +152,6 @@ button {
   filter: blur(2px);
   transform-origin: center;
   animation: shadow-pulse 2.8s ease-in-out infinite;
-}
-
-.pet-effects {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  z-index: 2;
-  min-width: 58px;
-  min-height: 30px;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.thinking-dots {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 28px;
-  padding: 7px 10px;
-  border: 1px solid rgba(47, 92, 79, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 8px 18px rgba(36, 66, 57, 0.12);
-}
-
-.thinking-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: #356f5a;
-  animation: dot-bounce 850ms ease-in-out infinite;
-}
-
-.thinking-dots span:nth-child(2) {
-  animation-delay: 120ms;
-}
-
-.thinking-dots span:nth-child(3) {
-  animation-delay: 240ms;
-}
-
-.sleep-label {
-  display: inline-block;
-  color: #4d6471;
-  font-weight: 800;
-  letter-spacing: 0;
-  transform: rotate(-10deg);
-  animation: sleep-rise 1.8s ease-in-out infinite;
-}
-
-.pet-thinking {
-  animation: pet-think 1.2s ease-in-out infinite;
-}
-
-.pet-talking .pet-model {
-  animation: pet-talk 540ms ease-in-out infinite;
-}
-
-.pet-happy {
-  animation: pet-hop 820ms ease-in-out infinite;
-}
-
-.pet-sleeping {
-  animation: none;
-}
-
-.pet-sleeping .pet-model {
-  filter: saturate(0.8) brightness(0.86);
-  opacity: 0.88;
-}
-
-.pet-sleeping .pet-shadow {
-  animation: none;
-  opacity: 0.55;
 }
 
 .chat-panel {
@@ -466,16 +435,6 @@ button {
   text-align: left;
 }
 
-@keyframes pet-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
-}
-
 @keyframes shadow-pulse {
   0%,
   100% {
@@ -488,37 +447,7 @@ button {
   }
 }
 
-@keyframes pet-think {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(-2deg);
-  }
-}
-
-@keyframes pet-talk {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.035, 0.965);
-  }
-}
-
-@keyframes pet-hop {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  45% {
-    transform: translateY(-15px) scale(1.04, 0.96);
-  }
-}
-
-@keyframes dot-bounce {
+@keyframes mmd-cue-dot {
   0%,
   100% {
     transform: translateY(0);
@@ -530,7 +459,7 @@ button {
   }
 }
 
-@keyframes sleep-rise {
+@keyframes mmd-cue-sleep {
   0%,
   100% {
     transform: translateY(0) rotate(-10deg);

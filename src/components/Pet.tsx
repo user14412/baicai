@@ -79,24 +79,13 @@ export function Pet({
   return (
     <button
       aria-label={`${petName} desktop pet`}
-      className={`pet interactive-surface pet-${petState}`}
+      className="pet interactive-surface"
       type="button"
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
     >
-      <span className="pet-effects" aria-hidden="true">
-        {petState === "thinking" ? (
-          <span className="thinking-dots">
-            <span />
-            <span />
-            <span />
-          </span>
-        ) : null}
-        {petState === "sleeping" ? <span className="sleep-label">Zzz</span> : null}
-      </span>
-
       <MmdPetModel petState={petState} />
 
       <span className="pet-shadow" />

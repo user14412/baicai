@@ -14,9 +14,9 @@ baicai 是一个 Windows 桌面桌宠 MVP。当前版本在 `v0.1 MVP baseline` 
 - 聊天窗口是 720x640 的普通可缩放窗口，承载聊天、设置和后续小功能。
 - 使用 `resources/眞白花音偶像服Q版MMD模型/眞白花音_增加腕部骨骼限制.pmx` 渲染桌宠角色。
 - 通过 Three.js + `three-stdlib` 的 `MMDLoader` 在前端加载 PMX、贴图、toon/spa 资源。
-- 对 MMD 模型做了饱和度和对比度增强，避免看起来像被白色蒙层覆盖。
+- 对 MMD 模型做了高分辨率 canvas 渲染、贴图采样优化、饱和度和对比度增强，避免看起来发白或偏糊。
 - 桌宠状态：`idle`、`thinking`、`talking`、`happy`、`sleeping`。
-- 根据状态切换轻量 Three.js 动画和 CSS 状态效果。
+- 根据状态切换集中在 MMD 渲染层里的轻量 Three.js 动作，并保留思考 `...`、睡觉 `Zzz` 这类 MMD 状态提示。
 - 拖动桌宠移动窗口。
 - 右键菜单：打开/关闭聊天、睡觉/唤醒、清空对话、退出应用。
 - 聊天面板：消息列表、输入框、发送按钮、关闭按钮、设置入口。
@@ -130,6 +130,7 @@ baicai/
     lib/
       constants.ts
       llm.ts
+      mmdPetConfig.ts
       storage.ts
       tauri.ts
       types.ts
@@ -164,6 +165,7 @@ baicai/
 - `src/hooks/usePetState.ts`：桌宠状态机。
 - `src/hooks/useSettings.ts`：设置读取和保存。
 - `src/lib/llm.ts`：OpenAI-compatible Chat Completions API 封装。
+- `src/lib/mmdPetConfig.ts`：MMD 模型路径、相机、灯光、归一化高度等调参配置。
 - `src/lib/storage.ts`：localStorage 读写。
 - `src/lib/tauri.ts`：Tauri 窗口拖动、置顶、创建聊天窗口、窗口间状态通知和关闭封装。
 - `src/lib/types.ts`：共享 TypeScript 类型。
@@ -249,7 +251,7 @@ publicDir: "resources"
 
 ### 这次又修了哪些体验问题？
 
-- 模型发白：不再压暗材质，改为柔和灯光 + canvas 饱和度/对比度增强。
+- 模型发白或偏糊：不再压暗材质，改为柔和灯光 + 高分辨率 canvas + 贴图采样优化 + 饱和度/对比度增强。
 - 模型遮挡聊天框：聊天从桌宠窗口中移出，变成独立大窗口。
 - 聊天框不能伸缩：聊天窗口本身可缩放，不再挤在桌宠主窗口里。
 - 模型下身被挡住：扩大模型画布，调小 PMX 缩放并拉远相机，让完整下身进入画面。
@@ -312,4 +314,5 @@ v0.1 使用非流式请求，先保证 MVP 简洁稳定。
 - 增加开机自启动选项。
 - 将 API Key 存储迁移到更安全的本地方案。
 - 增加更多桌宠动作和状态。
+- 增加 MMD morph 表情、VPD 姿势或 VMD 动作文件播放，让模型从默认站姿进化到真实表情和动作。
 - 增加更细的错误提示和重试入口。

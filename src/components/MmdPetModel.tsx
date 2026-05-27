@@ -6,21 +6,28 @@ import {
   DirectionalLight,
   Group,
   MathUtils,
+  Mesh,
   PerspectiveCamera,
   Scene,
   SkinnedMesh,
+  Texture,
   Vector3,
   WebGLRenderer,
 } from "three";
 import { MMDLoader } from "three-stdlib";
+import {
+  MMD_PET_BASE_POSITION_Y,
+  MMD_PET_CAMERA,
+  MMD_PET_LIGHTS,
+  MMD_PET_MODEL_HEIGHT,
+  MMD_PET_MODEL_PATH,
+  MMD_PET_RENDERING,
+} from "../lib/mmdPetConfig";
 import type { PetState } from "../lib/types";
 
 type MmdPetModelProps = {
   petState: PetState;
 };
-
-const MODEL_PATH =
-  "/眞白花音偶像服Q版MMD模型/眞白花音_增加腕部骨骼限制.pmx";
 
 const IGNORED_MMD_WARNINGS = [
   "THREE.Material: 'combine' is not a property of THREE.MeshToonMaterial.",
@@ -28,6 +35,24 @@ const IGNORED_MMD_WARNINGS = [
   "THREE.Material: 'morphTargets' is not a property of THREE.MeshToonMaterial.",
   "THREE.Material: 'skinning' is not a property of THREE.MeshToonMaterial.",
 ];
+
+type MmdMotionFrame = {
+  rootY: number;
+  rotationY: number;
+  rotationZ: number;
+  scaleX: number;
+  scaleY: number;
+  scaleZ: number;
+};
+
+const DEFAULT_MMD_MOTION: MmdMotionFrame = {
+  rootY: MMD_PET_BASE_POSITION_Y,
+  rotationY: 0,
+  rotationZ: 0,
+  scaleX: 1,
+  scaleY: 1,
+  scaleZ: 1,
+};
 
 export function MmdPetModel({ petState }: MmdPetModelProps) {
   const containerRef = useRef<HTMLSpanElement | null>(null);
@@ -50,9 +75,22 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
     const scene = new Scene();
     scene.background = null;
 
-    const camera = new PerspectiveCamera(30, 1, 0.1, 100);
-    camera.position.set(0, 0.15, 4.8);
-    camera.lookAt(0, 0.05, 0);
+    const camera = new PerspectiveCamera(
+      MMD_PET_CAMERA.fov,
+      1,
+      MMD_PET_CAMERA.near,
+      MMD_PET_CAMERA.far,
+    );
+    camera.position.set(
+      MMD_PET_CAMERA.position.x,
+      MMD_PET_CAMERA.position.y,
+      MMD_PET_CAMERA.position.z,
+    );
+    camera.lookAt(
+      MMD_PET_CAMERA.lookAt.x,
+      MMD_PET_CAMERA.lookAt.y,
+      MMD_PET_CAMERA.lookAt.z,
+    );
 
     const modelRoot = new Group();
     scene.add(modelRoot);
@@ -63,15 +101,37 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
       powerPreference: "high-performance",
     });
     renderer.setClearAlpha(0);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(
+      Math.min(
+        window.devicePixelRatio * MMD_PET_RENDERING.pixelRatioMultiplier,
+        MMD_PET_RENDERING.maxPixelRatio,
+      ),
+    );
     renderer.outputColorSpace = "srgb";
     container.appendChild(renderer.domElement);
 
-    const ambient = new AmbientLight(new Color("#ffffff"), 1.25);
-    const keyLight = new DirectionalLight(new Color("#fff8ee"), 0.72);
-    keyLight.position.set(2.5, 4, 4);
-    const fillLight = new DirectionalLight(new Color("#ffe4f2"), 0.46);
-    fillLight.position.set(-3, 2, 3);
+    const ambient = new AmbientLight(
+      new Color(MMD_PET_LIGHTS.ambient.color),
+      MMD_PET_LIGHTS.ambient.intensity,
+    );
+    const keyLight = new DirectionalLight(
+      new Color(MMD_PET_LIGHTS.key.color),
+      MMD_PET_LIGHTS.key.intensity,
+    );
+    keyLight.position.set(
+      MMD_PET_LIGHTS.key.position.x,
+      MMD_PET_LIGHTS.key.position.y,
+      MMD_PET_LIGHTS.key.position.z,
+    );
+    const fillLight = new DirectionalLight(
+      new Color(MMD_PET_LIGHTS.fill.color),
+      MMD_PET_LIGHTS.fill.intensity,
+    );
+    fillLight.position.set(
+      MMD_PET_LIGHTS.fill.position.x,
+      MMD_PET_LIGHTS.fill.position.y,
+      MMD_PET_LIGHTS.fill.position.z,
+    );
     scene.add(ambient, keyLight, fillLight);
 
     const resize = () => {
@@ -88,18 +148,19 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
     const restoreConsoleWarn = silenceMmdCompatibilityWarnings();
 
     loader.load(
-      MODEL_PATH,
+      MMD_PET_MODEL_PATH,
       (loadedMesh) => {
         if (isDisposed) {
           return;
         }
 
         mesh = loadedMesh;
+        sharpenMmdTextures(mesh, renderer);
 
         const box = new Box3().setFromObject(mesh);
         const center = box.getCenter(new Vector3());
         const size = box.getSize(new Vector3());
-        const scale = size.y > 0 ? 2.55 / size.y : 1;
+        const scale = size.y > 0 ? MMD_PET_MODEL_HEIGHT / size.y : 1;
 
         mesh.scale.setScalar(scale);
         mesh.position.set(
@@ -125,22 +186,12 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
     const animate = () => {
       const elapsed = (performance.now() - startedAt) / 1000;
       const currentState = stateRef.current;
+      const motion = getMmdMotionFrame(currentState, elapsed);
 
-      const bob =
-        currentState === "sleeping" ? 0 : Math.sin(elapsed * 2.4) * 0.035;
-      const hop =
-        currentState === "happy" ? Math.abs(Math.sin(elapsed * 7)) * 0.13 : 0;
-      const talkScale =
-        currentState === "talking" ? 1 + Math.sin(elapsed * 12) * 0.018 : 1;
-      const thinkTurn =
-        currentState === "thinking" ? Math.sin(elapsed * 3) * 0.05 : 0;
-      const sleepTilt =
-        currentState === "sleeping" ? MathUtils.degToRad(-7) : 0;
-
-      modelRoot.position.y = -0.25 + bob + hop;
-      modelRoot.rotation.z = sleepTilt;
-      modelRoot.rotation.y = thinkTurn;
-      modelRoot.scale.set(talkScale, 1 / talkScale, talkScale);
+      modelRoot.position.y = motion.rootY;
+      modelRoot.rotation.y = motion.rotationY;
+      modelRoot.rotation.z = motion.rotationZ;
+      modelRoot.scale.set(motion.scaleX, motion.scaleY, motion.scaleZ);
 
       renderer.render(scene, camera);
       animationFrame = window.requestAnimationFrame(animate);
@@ -164,7 +215,95 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
     };
   }, []);
 
-  return <span ref={containerRef} className="pet-model" aria-hidden="true" />;
+  return (
+    <span ref={containerRef} className="pet-model" aria-hidden="true">
+      {petState === "thinking" ? (
+        <span className="mmd-status-cue mmd-status-cue-thinking">
+          <span />
+          <span />
+          <span />
+        </span>
+      ) : null}
+      {petState === "sleeping" ? (
+        <span className="mmd-status-cue mmd-status-cue-sleep">Zzz</span>
+      ) : null}
+    </span>
+  );
+}
+
+function getMmdMotionFrame(petState: PetState, elapsed: number): MmdMotionFrame {
+  const idleBob = Math.sin(elapsed * 2.4) * 0.025;
+
+  switch (petState) {
+    case "thinking":
+      return {
+        ...DEFAULT_MMD_MOTION,
+        rootY: DEFAULT_MMD_MOTION.rootY + idleBob * 0.4,
+        rotationY: Math.sin(elapsed * 2.8) * 0.16,
+        rotationZ: Math.sin(elapsed * 2.8) * 0.035,
+      };
+    case "talking": {
+      const talkPulse = 1 + Math.sin(elapsed * 12) * 0.026;
+      return {
+        ...DEFAULT_MMD_MOTION,
+        rootY: DEFAULT_MMD_MOTION.rootY + idleBob,
+        scaleX: talkPulse,
+        scaleY: 1 / talkPulse,
+        scaleZ: talkPulse,
+      };
+    }
+    case "happy":
+      return {
+        ...DEFAULT_MMD_MOTION,
+        rootY:
+          DEFAULT_MMD_MOTION.rootY +
+          idleBob +
+          Math.abs(Math.sin(elapsed * 7)) * 0.16,
+        rotationY: Math.sin(elapsed * 8) * 0.08,
+        rotationZ: Math.sin(elapsed * 8) * 0.035,
+      };
+    case "sleeping":
+      return {
+        ...DEFAULT_MMD_MOTION,
+        rotationZ: MathUtils.degToRad(-7),
+      };
+    case "idle":
+    default:
+      return {
+        ...DEFAULT_MMD_MOTION,
+        rootY: DEFAULT_MMD_MOTION.rootY + idleBob,
+      };
+  }
+}
+
+function sharpenMmdTextures(mesh: SkinnedMesh, renderer: WebGLRenderer) {
+  const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+  const anisotropy = Math.min(
+    MMD_PET_RENDERING.textureAnisotropy,
+    maxAnisotropy,
+  );
+
+  mesh.traverse((object) => {
+    if (!(object instanceof Mesh)) {
+      return;
+    }
+
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+
+    materials.forEach((material) => {
+      for (const textureKey of ["map", "emissiveMap", "normalMap", "alphaMap"]) {
+        const texture = material[textureKey as keyof typeof material];
+        if (texture instanceof Texture) {
+          texture.anisotropy = anisotropy;
+          if (texture.image) {
+            texture.needsUpdate = true;
+          }
+        }
+      }
+    });
+  });
 }
 
 function silenceMmdCompatibilityWarnings() {
