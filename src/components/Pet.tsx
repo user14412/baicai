@@ -16,6 +16,7 @@ type PointerSnapshot = {
   y: number;
   time: number;
   moved: boolean;
+  dragStarted: boolean;
 };
 
 export function Pet({
@@ -36,9 +37,8 @@ export function Pet({
       y: event.screenY,
       time: Date.now(),
       moved: false,
+      dragStarted: false,
     };
-
-    void startWindowDrag();
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
@@ -54,12 +54,17 @@ export function Pet({
     if (distance > 4) {
       snapshot.moved = true;
     }
+
+    if (!snapshot.dragStarted && distance > 8) {
+      snapshot.dragStarted = true;
+      void startWindowDrag();
+    }
   };
 
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     const snapshot = pointerRef.current;
     const elapsed = snapshot ? Date.now() - snapshot.time : 0;
-    const wasDrag = Boolean(snapshot?.moved) || elapsed > 180;
+    const wasDrag = Boolean(snapshot?.dragStarted) || elapsed > 350;
 
     pointerRef.current = null;
 

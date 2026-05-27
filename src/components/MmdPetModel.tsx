@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AmbientLight,
   Box3,
@@ -18,6 +18,7 @@ import { MMDAnimationHelper, MMDLoader } from "three-stdlib";
 import {
   MMD_PET_BASE_POSITION_Y,
   MMD_PET_CAMERA,
+  MMD_PET_IDLE_POSE_PATHS,
   MMD_PET_LIGHTS,
   MMD_PET_MODEL_HEIGHT,
   MMD_PET_MODEL_PATH,
@@ -58,12 +59,27 @@ const DEFAULT_MMD_MOTION: MmdMotionFrame = {
 const BLINK_MORPH_NAME = "まばたき";
 const BLINK_INTERVAL_SECONDS = 3.6;
 const BLINK_DURATION_SECONDS = 0.16;
+const IDLE_POSE_MIN_SECONDS = 8;
+const IDLE_POSE_RANDOM_SECONDS = 7;
+const IDLE_SINGING_SECONDS = 4.8;
+const IDLE_SINGING_CHANCE = 0.24;
 
 type MmdVpdPose = object;
+type IdleCue = "none" | "music";
+type MorphPreset = Record<string, number>;
+
+const SMILE_MORPH_PRESET: MorphPreset = {
+  にこり: 0.28,
+  微笑み: 0.28,
+  笑顔: 0.24,
+} as const;
+
+const MANAGED_MORPH_NAMES = Object.keys(SMILE_MORPH_PRESET);
 
 export function MmdPetModel({ petState }: MmdPetModelProps) {
   const containerRef = useRef<HTMLSpanElement | null>(null);
   const stateRef = useRef(petState);
+  const [idleCue, setIdleCue] = useState<IdleCue>("none");
 
   useEffect(() => {
     stateRef.current = petState;
@@ -78,6 +94,10 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
     let animationFrame = 0;
     let isDisposed = false;
     let mesh: SkinnedMesh | null = null;
+    let activeMorphPreset: MorphPreset = {};
+    let currentIdleCue: IdleCue = "none";
+    let currentIdlePosePath: string = MMD_PET_POSE_PATHS.idle;
+    let nextIdlePoseAt = 0;
 
     const scene = new Scene();
     scene.background = null;
@@ -181,9 +201,53 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
       return request;
     };
 
-    const applyPoseForState = (targetMesh: SkinnedMesh, nextState: PetState) => {
-      const posePath = getPosePathForState(nextState);
+    const setNextIdleCue = (nextIdleCue: IdleCue) => {
+      if (currentIdleCue === nextIdleCue) {
+        return;
+      }
+
+      currentIdleCue = nextIdleCue;
+      setIdleCue(nextIdleCue);
+    };
+
+    const getIdlePosePath = (elapsed: number) => {
+      if (elapsed < nextIdlePoseAt) {
+        return currentIdlePosePath;
+      }
+
+      const shouldSing = Math.random() < IDLE_SINGING_CHANCE;
+      currentIdlePosePath = shouldSing
+        ? MMD_PET_IDLE_POSE_PATHS[1]
+        : MMD_PET_IDLE_POSE_PATHS[0];
+      nextIdlePoseAt =
+        elapsed +
+        (shouldSing
+          ? IDLE_SINGING_SECONDS
+          : IDLE_POSE_MIN_SECONDS + Math.random() * IDLE_POSE_RANDOM_SECONDS);
+
+      if (shouldSing) {
+        setNextIdleCue("music");
+      } else {
+        setNextIdleCue("none");
+      }
+
+      return currentIdlePosePath;
+    };
+
+    const applyPoseForState = (
+      targetMesh: SkinnedMesh,
+      nextState: PetState,
+      elapsed: number,
+    ) => {
+      const posePath =
+        nextState === "idle"
+          ? getIdlePosePath(elapsed)
+          : getPosePathForState(nextState);
       const pose = poseCache.get(posePath);
+
+      if (nextState !== "idle") {
+        setNextIdleCue("none");
+      }
 
       if (pose) {
         if (appliedPosePath !== posePath) {
@@ -193,6 +257,7 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
             grant: true,
           });
           appliedPosePath = posePath;
+          activeMorphPreset = getMorphPresetForPose(nextState, posePath);
           console.info(`[baicai] Applied MMD VPD pose: ${posePath}`);
         }
         return;
@@ -216,6 +281,7 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
             grant: true,
           });
           appliedPosePath = idlePosePath;
+          activeMorphPreset = getMorphPresetForPose(nextState, idlePosePath);
           console.info(
             `[baicai] Applied fallback MMD VPD pose: ${idlePosePath}`,
           );
@@ -277,7 +343,8 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
       modelRoot.scale.set(motion.scaleX, motion.scaleY, motion.scaleZ);
 
       if (mesh) {
-        applyPoseForState(mesh, currentState);
+        applyPoseForState(mesh, currentState, elapsed);
+        applyMorphPreset(mesh, activeMorphPreset);
         applyBlink(mesh, elapsed);
       }
 
@@ -315,6 +382,18 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
       {petState === "sleeping" ? (
         <span className="mmd-status-cue mmd-status-cue-sleep">Zzz</span>
       ) : null}
+      {petState === "idle" && idleCue === "music" ? (
+        <span className="mmd-status-cue mmd-status-cue-music">
+          <span>♪</span>
+          <span>♫</span>
+        </span>
+      ) : null}
+      {petState === "happy" ? (
+        <span className="mmd-status-cue mmd-status-cue-heart">
+          <span>♥</span>
+          <span>♡</span>
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -344,6 +423,21 @@ function loadVpdPose(
   });
 }
 
+function getMorphPresetForPose(
+  petState: PetState,
+  posePath: string,
+): MorphPreset {
+  if (petState === "happy") {
+    return SMILE_MORPH_PRESET;
+  }
+
+  if (posePath === MMD_PET_IDLE_POSE_PATHS[1]) {
+    return SMILE_MORPH_PRESET;
+  }
+
+  return {};
+}
+
 function logMmdDebugInfo(mesh: SkinnedMesh) {
   if (!import.meta.env.DEV) {
     return;
@@ -355,6 +449,29 @@ function logMmdDebugInfo(mesh: SkinnedMesh) {
   console.log("PMX bone names:", boneNames);
   console.log("PMX morphTargetDictionary:", mesh.morphTargetDictionary ?? {});
   console.groupEnd();
+}
+
+function applyMorphPreset(mesh: SkinnedMesh, preset: MorphPreset) {
+  const dictionary = mesh.morphTargetDictionary;
+  const influences = mesh.morphTargetInfluences;
+
+  if (!dictionary || !influences) {
+    return;
+  }
+
+  for (const name of MANAGED_MORPH_NAMES) {
+    const morphIndex = dictionary[name];
+    if (morphIndex !== undefined) {
+      influences[morphIndex] = 0;
+    }
+  }
+
+  for (const [name, value] of Object.entries(preset)) {
+    const morphIndex = dictionary[name];
+    if (morphIndex !== undefined) {
+      influences[morphIndex] = value;
+    }
+  }
 }
 
 function applyBlink(mesh: SkinnedMesh, elapsed: number) {

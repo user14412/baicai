@@ -29,11 +29,16 @@ export const MMD_PET_RENDERING = {
 
 export const MMD_PET_POSE_PATHS = {
   idle: "/poses/kanon_idle.vpd",
-  thinking: "/poses/thinking.vpd",
+  thinking: "/poses/kanon_think.vpd",
   talking: "/poses/kanon_idle.vpd",
   happy: "/poses/happy.vpd",
   sleeping: "/poses/sleeping.vpd",
 } as const;
+
+export const MMD_PET_IDLE_POSE_PATHS = [
+  "/poses/kanon_idle.vpd",
+  "/poses/kanon_singing.vpd",
+] as const;
 
 export const MMD_PET_LIGHTS = {
   ambient: {
