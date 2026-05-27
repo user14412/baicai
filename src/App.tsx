@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { ChatPanel } from "./components/ChatPanel";
 import { ContextMenu } from "./components/ContextMenu";
 import { Pet } from "./components/Pet";
@@ -8,14 +9,20 @@ import { useSettings } from "./hooks/useSettings";
 import {
   applyAlwaysOnTop,
   closeCurrentWindow,
+  isChatWindowMode,
   listenWindowMoves,
+  listenMainPetState,
+  notifyMainPetState,
+  openChatWindow,
   restoreWindowPosition,
 } from "./lib/tauri";
 import {
+  clearMessages,
   clearWindowPosition,
   loadWindowPosition,
   saveWindowPosition,
 } from "./lib/storage";
+import type { PetState } from "./lib/types";
 
 type MenuPosition = {
   x: number;
@@ -23,18 +30,47 @@ type MenuPosition = {
 };
 
 function App() {
+  return isChatWindowMode() ? <ChatWindowApp /> : <PetWindowApp />;
+}
+
+function PetWindowApp() {
   const { settings, saveSettings } = useSettings();
   const { petState, setPetState, setTemporaryState } = usePetState();
-  const { messages, isLoading, sendMessage, clearChat } = useChat(
-    settings,
-    setPetState,
-  );
-  const [isChatOpen, setIsChatOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [isPreviewChatOpen, setIsPreviewChatOpen] = useState(false);
 
   useEffect(() => {
     void applyAlwaysOnTop(settings.alwaysOnTop);
   }, [settings.alwaysOnTop]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let isDisposed = false;
+
+    void listenMainPetState((nextPetState) => {
+      setPetState(nextPetState);
+    }).then((nextUnlisten) => {
+      if (isDisposed) {
+        nextUnlisten?.();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      isDisposed = true;
+      unlisten?.();
+    };
+  }, [setPetState]);
+
+  useEffect(() => {
+    const openPreviewChat = () => setIsPreviewChatOpen(true);
+    window.addEventListener("baicai:open-chat-preview", openPreviewChat);
+    return () => {
+      window.removeEventListener("baicai:open-chat-preview", openPreviewChat);
+    };
+  }, []);
 
   useEffect(() => {
     let saveTimer: number | null = null;
@@ -78,14 +114,14 @@ function App() {
   }, []);
 
   const openChat = useCallback(() => {
-    setIsChatOpen(true);
+    void openChatWindow();
     if (petState === "idle" || petState === "happy") {
       setTemporaryState("happy", 900);
     }
   }, [petState, setTemporaryState]);
 
   const toggleChat = useCallback(() => {
-    setIsChatOpen((current) => !current);
+    void openChatWindow();
     closeMenu();
   }, [closeMenu]);
 
@@ -95,9 +131,9 @@ function App() {
   }, [closeMenu, setPetState]);
 
   const handleClearChat = useCallback(() => {
-    clearChat();
+    clearMessages();
     closeMenu();
-  }, [clearChat, closeMenu]);
+  }, [closeMenu]);
 
   const handleContextMenu = useCallback((position: MenuPosition) => {
     setMenuPosition(position);
@@ -111,13 +147,13 @@ function App() {
   return (
     <main className="app" onClick={closeMenu}>
       <section className="stage" aria-label="baicai desktop pet">
-        {isChatOpen ? (
+        {isPreviewChatOpen ? (
           <ChatPanel
-            isLoading={isLoading}
-            messages={messages}
-            onClear={clearChat}
-            onClose={() => setIsChatOpen(false)}
-            onSend={sendMessage}
+            isLoading={false}
+            messages={[]}
+            onClear={clearMessages}
+            onClose={() => setIsPreviewChatOpen(false)}
+            onSend={() => {}}
             onSettingsSave={saveSettings}
             settings={settings}
           />
@@ -133,7 +169,7 @@ function App() {
 
       {menuPosition ? (
         <ContextMenu
-          isChatOpen={isChatOpen}
+          isChatOpen={isPreviewChatOpen}
           isSleeping={petState === "sleeping"}
           position={menuPosition}
           onClearChat={handleClearChat}
@@ -143,6 +179,52 @@ function App() {
           onToggleSleep={toggleSleep}
         />
       ) : null}
+    </main>
+  );
+}
+
+function ChatWindowApp() {
+  const { settings, saveSettings } = useSettings();
+  const { setPetState } = usePetState();
+  const setSharedPetState = useMemo<Dispatch<SetStateAction<PetState>>>(
+    () => (action) => {
+      setPetState((current) => {
+        const nextPetState =
+          typeof action === "function"
+            ? (action as (current: PetState) => PetState)(current)
+            : action;
+
+        void notifyMainPetState(nextPetState);
+        return nextPetState;
+      });
+    },
+    [setPetState],
+  );
+  const { messages, isLoading, sendMessage, clearChat } = useChat(
+    settings,
+    setSharedPetState,
+  );
+
+  useEffect(() => {
+    return () => {
+      void notifyMainPetState("idle");
+    };
+  }, []);
+
+  return (
+    <main className="chat-window-app">
+      <ChatPanel
+        isLoading={isLoading}
+        messages={messages}
+        onClear={clearChat}
+        onClose={() => {
+          void notifyMainPetState("idle");
+          void closeCurrentWindow();
+        }}
+        onSend={sendMessage}
+        onSettingsSave={saveSettings}
+        settings={settings}
+      />
     </main>
   );
 }

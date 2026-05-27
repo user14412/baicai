@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "baicai",
-        "width": 360,
-        "height": 460,
+        "width": 340,
+        "height": 390,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,

@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import type { MouseEvent, PointerEvent } from "react";
+import { MmdPetModel } from "./MmdPetModel";
 import { startWindowDrag } from "../lib/tauri";
 import type { PetState } from "../lib/types";
 
@@ -78,7 +79,7 @@ export function Pet({
   return (
     <button
       aria-label={`${petName} desktop pet`}
-      className={`pet pet-${petState}`}
+      className={`pet interactive-surface pet-${petState}`}
       type="button"
       onClick={handleClick}
       onContextMenu={handleContextMenu}
@@ -96,19 +97,7 @@ export function Pet({
         {petState === "sleeping" ? <span className="sleep-label">Zzz</span> : null}
       </span>
 
-      <span className="pet-body">
-        <span className="pet-leaf pet-leaf-left" />
-        <span className="pet-leaf pet-leaf-right" />
-        <span className="pet-ear pet-ear-left" />
-        <span className="pet-ear pet-ear-right" />
-        <span className="pet-face">
-          <span className="pet-eye pet-eye-left" />
-          <span className="pet-eye pet-eye-right" />
-          <span className="pet-mouth" />
-        </span>
-        <span className="pet-cheek pet-cheek-left" />
-        <span className="pet-cheek pet-cheek-right" />
-      </span>
+      <MmdPetModel petState={petState} />
 
       <span className="pet-shadow" />
     </button>

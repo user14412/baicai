@@ -33,7 +33,7 @@ export function ContextMenu({
 
   return (
     <menu
-      className="context-menu"
+      className="context-menu interactive-surface"
       style={{
         left: Math.max(6, left),
         top: Math.max(6, top),

@@ -3,8 +3,10 @@ import {
   availableMonitors,
   getCurrentWindow,
 } from "@tauri-apps/api/window";
+import { emitTo, listen } from "@tauri-apps/api/event";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import type { WindowPosition } from "./types";
+import type { PetState, WindowPosition } from "./types";
 
 declare global {
   interface Window {
@@ -14,6 +16,14 @@ declare global {
 
 function isTauriRuntime() {
   return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
+}
+
+export function isChatWindowMode() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return new URLSearchParams(window.location.search).get("window") === "chat";
 }
 
 export async function startWindowDrag() {
@@ -37,6 +47,72 @@ export async function applyAlwaysOnTop(alwaysOnTop: boolean) {
     await getCurrentWindow().setAlwaysOnTop(alwaysOnTop);
   } catch (error) {
     console.warn("Failed to update always-on-top", error);
+  }
+}
+
+export async function openChatWindow() {
+  if (!isTauriRuntime()) {
+    window.dispatchEvent(new CustomEvent("baicai:open-chat-preview"));
+    return;
+  }
+
+  const existing = await WebviewWindow.getByLabel("chat");
+  if (existing) {
+    await existing.show();
+    await existing.setFocus();
+    return;
+  }
+
+  const chatUrl = new URL(window.location.href);
+  chatUrl.search = "?window=chat";
+  chatUrl.hash = "";
+
+  const chatWindow = new WebviewWindow("chat", {
+    url: chatUrl.toString(),
+    title: "baicai chat",
+    width: 720,
+    height: 640,
+    minWidth: 520,
+    minHeight: 460,
+    center: true,
+    decorations: true,
+    transparent: false,
+    resizable: true,
+    alwaysOnTop: false,
+    focus: true,
+  });
+
+  chatWindow.once("tauri://error", (event) => {
+    console.warn("Failed to create chat window", event.payload);
+  });
+}
+
+export async function notifyMainPetState(petState: PetState) {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  try {
+    await emitTo("main", "baicai://pet-state", petState);
+  } catch (error) {
+    console.warn("Failed to notify main pet state", error);
+  }
+}
+
+export async function listenMainPetState(
+  onPetState: (petState: PetState) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  try {
+    return await listen<PetState>("baicai://pet-state", ({ payload }) => {
+      onPetState(payload);
+    });
+  } catch (error) {
+    console.warn("Failed to listen for pet state", error);
+    return null;
   }
 }
 

@@ -51,7 +51,10 @@ export function ChatPanel({
   };
 
   return (
-    <section className="chat-panel" onClick={(event) => event.stopPropagation()}>
+    <section
+      className="chat-panel interactive-surface"
+      onClick={(event) => event.stopPropagation()}
+    >
       <header className="chat-header">
         <div>
           <strong>{settings.petName}</strong>
