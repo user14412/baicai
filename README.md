@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-baicai 是一个 Windows 桌面桌宠 MVP。当前版本在 `v0.1 MVP baseline` 的基础上，把原 CSS 占位角色替换为本地 MMD/PMX 模型渲染，同时继续保留 Tauri 2 + React 桌宠壳子、基础聊天 UI、本地设置保存和 OpenAI-compatible API 调用流程。
+baicai 是一个 Windows 桌面桌宠 MVP。当前版本使用 Tauri 2 + React 构建桌宠主窗口和独立聊天窗口，用 Three.js 渲染本地 MMD/PMX 模型，并通过 OpenAI-compatible Chat Completions API 提供基础聊天能力。
 
 当前版本只做个人本地测试用途，不包含复杂智能能力。
 
@@ -23,8 +23,8 @@ baicai 是一个 Windows 桌面桌宠 MVP。当前版本在 `v0.1 MVP baseline` 
 - Enter 发送，Shift+Enter 换行。
 - loading 时禁用发送按钮。
 - 设置面板：桌宠名字、用户称呼、模型、API 地址、API Key、性格设定、是否置顶。
-- 非流式 OpenAI-compatible Chat Completions API 调用。
-- 使用 localStorage 保存设置和最近 20 条消息。
+- 流式 OpenAI-compatible Chat Completions API 调用，回复会边生成边更新到聊天气泡。
+- 使用 localStorage 保存设置、窗口位置和最近 20 条消息。
 
 ## 明确不包含的功能
 
@@ -36,7 +36,6 @@ baicai 是一个 Windows 桌面桌宠 MVP。当前版本在 `v0.1 MVP baseline` 
 - 不包含 RAG。
 - 不包含 SQLite。
 - 不包含自动操作电脑。
-- 不包含流式输出。
 - 不包含托盘菜单。
 - 不包含开机自启动。
 - 不包含多角色系统。
@@ -161,7 +160,7 @@ baicai/
 - `src/components/ChatBubble.tsx`：单条消息气泡。
 - `src/components/SettingsPanel.tsx`：设置面板。
 - `src/components/ContextMenu.tsx`：桌宠右键菜单。
-- `src/hooks/useChat.ts`：聊天状态、发送消息、清空对话。
+- `src/hooks/useChat.ts`：聊天状态、流式发送消息、清空对话。
 - `src/hooks/usePetState.ts`：桌宠状态机。
 - `src/hooks/useSettings.ts`：设置读取和保存。
 - `src/lib/llm.ts`：OpenAI-compatible Chat Completions API 封装。
@@ -216,6 +215,21 @@ Array<{
 
 消息最多保存最近 20 条。
 
+窗口位置保存 key：
+
+```text
+desktop-pet.window-position
+```
+
+保存内容：
+
+```ts
+{
+  x: number;
+  y: number;
+}
+```
+
 ## API Key 安全说明
 
 当前版本的 API Key 明文保存在 localStorage 中，仅适合个人本地测试。
@@ -249,29 +263,13 @@ publicDir: "resources"
 - 两个窗口共用 localStorage，所以设置和最近消息仍然是同一份本地数据。
 - 聊天窗口会通过 Tauri event 把 `thinking`、`talking`、`happy` 等状态发回桌宠窗口，让模型动画跟随聊天状态。
 
-### 这次又修了哪些体验问题？
+### 如何调整模型显示效果？
 
-- 模型发白或偏糊：不再压暗材质，改为柔和灯光 + 高分辨率 canvas + 贴图采样优化 + 饱和度/对比度增强。
-- 模型遮挡聊天框：聊天从桌宠窗口中移出，变成独立大窗口。
-- 聊天框不能伸缩：聊天窗口本身可缩放，不再挤在桌宠主窗口里。
-- 模型下身被挡住：扩大模型画布，调小 PMX 缩放并拉远相机，让完整下身进入画面。
-- 透明背景挡点击：先通过缩小桌宠主窗口的包围盒缓解。自动点击穿透方案已暂停，因为 Tauri 的 `setIgnoreCursorEvents(true)` 会让窗口收不到后续鼠标事件，导致桌宠无法再点击。
+模型路径、镜头、灯光、渲染清晰度和目标高度集中在 `src/lib/mmdPetConfig.ts`。模型在窗口里的画布尺寸、位置和 CSS 视觉增强在 `src/styles.css`。更详细的修改教程见 [`docs/model-customization.md`](docs/model-customization.md)。
 
-更详细的修改教程见 [`docs/model-customization.md`](docs/model-customization.md)。
+### 当前 MMD 动作能力到什么程度？
 
-### 这次分支怎么开的？
-
-这次从干净的 `main` 开了功能分支：
-
-```powershell
-git switch -c codex/mmd-pet-model
-```
-
-命名思路是 `来源/功能名`：`codex` 表示这条分支由 Codex 协作开发，`mmd-pet-model` 表示这次改动只围绕 MMD 桌宠模型。实际团队里也常见 `feature/mmd-pet-model`、`feat/mmd-pet-model` 这类命名；这里用 `codex/` 是为了和本地人工分支区分。
-
-### 为什么不是继续用 CSS 占位角色？
-
-v0.1 使用 CSS 绘制占位角色，目的是先验证桌宠窗口、状态动画和聊天流程。现在 `resources/` 下已有完整 PMX 模型和贴图，所以可以进入“真实模型渲染”的下一步。
+当前状态动画只包含根节点层面的轻量动作，例如上下浮动、左右转动、说话时轻微缩放，以及思考 `...`、睡觉 `Zzz` 状态提示。项目还没有接入 VMD/VPD，也没有控制 PMX 的骨骼姿势或 morph 表情，所以托腮、抱胸、眨眼、微笑这类真实 MMD 动作还没有实现。
 
 ### 为什么发送消息提示 API Key 缺失？
 
@@ -289,9 +287,7 @@ https://api.openai.com/v1
 /chat/completions
 ```
 
-### 为什么不是流式输出？
-
-v0.1 使用非流式请求，先保证 MVP 简洁稳定。
+聊天发送时使用 `stream: true`，流式解析 SSE 的 `data:` chunk，并把 token 增量更新到当前助手气泡。
 
 ### 数据保存在哪里？
 
@@ -307,12 +303,8 @@ v0.1 使用非流式请求，先保证 MVP 简洁稳定。
 
 ## Roadmap
 
-- 增加流式输出。
-- 增加真实桌宠图片或精灵图资源。
-- 增加窗口位置记忆。
 - 增加托盘菜单。
 - 增加开机自启动选项。
 - 将 API Key 存储迁移到更安全的本地方案。
-- 增加更多桌宠动作和状态。
 - 增加 MMD morph 表情、VPD 姿势或 VMD 动作文件播放，让模型从默认站姿进化到真实表情和动作。
 - 增加更细的错误提示和重试入口。

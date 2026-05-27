@@ -27,6 +27,14 @@ export const MMD_PET_RENDERING = {
   textureAnisotropy: 8,
 } as const;
 
+export const MMD_PET_POSE_PATHS = {
+  idle: "/poses/kanon_idle.vpd",
+  thinking: "/poses/thinking.vpd",
+  talking: "/poses/kanon_idle.vpd",
+  happy: "/poses/happy.vpd",
+  sleeping: "/poses/sleeping.vpd",
+} as const;
+
 export const MMD_PET_LIGHTS = {
   ambient: {
     color: "#ffffff",

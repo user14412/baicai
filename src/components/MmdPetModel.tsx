@@ -14,13 +14,14 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { MMDLoader } from "three-stdlib";
+import { MMDAnimationHelper, MMDLoader } from "three-stdlib";
 import {
   MMD_PET_BASE_POSITION_Y,
   MMD_PET_CAMERA,
   MMD_PET_LIGHTS,
   MMD_PET_MODEL_HEIGHT,
   MMD_PET_MODEL_PATH,
+  MMD_PET_POSE_PATHS,
   MMD_PET_RENDERING,
 } from "../lib/mmdPetConfig";
 import type { PetState } from "../lib/types";
@@ -53,6 +54,12 @@ const DEFAULT_MMD_MOTION: MmdMotionFrame = {
   scaleY: 1,
   scaleZ: 1,
 };
+
+const BLINK_MORPH_NAME = "まばたき";
+const BLINK_INTERVAL_SECONDS = 3.6;
+const BLINK_DURATION_SECONDS = 0.16;
+
+type MmdVpdPose = object;
 
 export function MmdPetModel({ petState }: MmdPetModelProps) {
   const containerRef = useRef<HTMLSpanElement | null>(null);
@@ -145,7 +152,81 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
     };
 
     const loader = new MMDLoader();
+    const poseHelper = new MMDAnimationHelper();
+    const poseCache = new Map<string, MmdVpdPose | null>();
+    const poseRequests = new Map<string, Promise<MmdVpdPose | null>>();
+    let appliedPosePath: string | null = null;
     const restoreConsoleWarn = silenceMmdCompatibilityWarnings();
+
+    const loadPose = (path: string) => {
+      if (poseCache.has(path)) {
+        return Promise.resolve(poseCache.get(path) ?? null);
+      }
+
+      const existingRequest = poseRequests.get(path);
+      if (existingRequest) {
+        return existingRequest;
+      }
+
+      const request = loadVpdPose(loader, path)
+        .then((pose) => {
+          poseCache.set(path, pose);
+          return pose;
+        })
+        .finally(() => {
+          poseRequests.delete(path);
+        });
+
+      poseRequests.set(path, request);
+      return request;
+    };
+
+    const applyPoseForState = (targetMesh: SkinnedMesh, nextState: PetState) => {
+      const posePath = getPosePathForState(nextState);
+      const pose = poseCache.get(posePath);
+
+      if (pose) {
+        if (appliedPosePath !== posePath) {
+          poseHelper.pose(targetMesh, pose, {
+            resetPose: true,
+            ik: true,
+            grant: true,
+          });
+          appliedPosePath = posePath;
+          console.info(`[baicai] Applied MMD VPD pose: ${posePath}`);
+        }
+        return;
+      }
+
+      if (!poseCache.has(posePath)) {
+        void loadPose(posePath);
+      }
+
+      const idlePosePath = MMD_PET_POSE_PATHS.idle;
+      if (posePath === idlePosePath) {
+        return;
+      }
+
+      const idlePose = poseCache.get(idlePosePath);
+      if (idlePose) {
+        if (appliedPosePath !== idlePosePath) {
+          poseHelper.pose(targetMesh, idlePose, {
+            resetPose: true,
+            ik: true,
+            grant: true,
+          });
+          appliedPosePath = idlePosePath;
+          console.info(
+            `[baicai] Applied fallback MMD VPD pose: ${idlePosePath}`,
+          );
+        }
+        return;
+      }
+
+      if (!poseCache.has(idlePosePath)) {
+        void loadPose(idlePosePath);
+      }
+    };
 
     loader.load(
       MMD_PET_MODEL_PATH,
@@ -155,7 +236,9 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
         }
 
         mesh = loadedMesh;
+        logMmdDebugInfo(mesh);
         sharpenMmdTextures(mesh, renderer);
+        void loadPose(MMD_PET_POSE_PATHS.idle);
 
         const box = new Box3().setFromObject(mesh);
         const center = box.getCenter(new Vector3());
@@ -193,6 +276,11 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
       modelRoot.rotation.z = motion.rotationZ;
       modelRoot.scale.set(motion.scaleX, motion.scaleY, motion.scaleZ);
 
+      if (mesh) {
+        applyPoseForState(mesh, currentState);
+        applyBlink(mesh, elapsed);
+      }
+
       renderer.render(scene, camera);
       animationFrame = window.requestAnimationFrame(animate);
     };
@@ -229,6 +317,61 @@ export function MmdPetModel({ petState }: MmdPetModelProps) {
       ) : null}
     </span>
   );
+}
+
+function getPosePathForState(petState: PetState) {
+  return MMD_PET_POSE_PATHS[petState] ?? MMD_PET_POSE_PATHS.idle;
+}
+
+function loadVpdPose(
+  loader: MMDLoader,
+  path: string,
+): Promise<MmdVpdPose | null> {
+  return new Promise((resolve) => {
+    loader.loadVPD(
+      path,
+      false,
+      (pose) => {
+        console.info(`[baicai] Loaded MMD VPD pose: ${path}`);
+        resolve(pose);
+      },
+      undefined,
+      (error) => {
+        console.warn(`[baicai] Failed to load MMD VPD pose: ${path}`, error);
+        resolve(null);
+      },
+    );
+  });
+}
+
+function logMmdDebugInfo(mesh: SkinnedMesh) {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+
+  const boneNames = mesh.skeleton.bones.map((bone) => bone.name);
+
+  console.groupCollapsed("[baicai] MMD model debug info");
+  console.log("PMX bone names:", boneNames);
+  console.log("PMX morphTargetDictionary:", mesh.morphTargetDictionary ?? {});
+  console.groupEnd();
+}
+
+function applyBlink(mesh: SkinnedMesh, elapsed: number) {
+  const blinkIndex = mesh.morphTargetDictionary?.[BLINK_MORPH_NAME];
+  const influences = mesh.morphTargetInfluences;
+
+  if (blinkIndex === undefined || !influences) {
+    return;
+  }
+
+  const phase = elapsed % BLINK_INTERVAL_SECONDS;
+  const blinkAmount =
+    phase <= BLINK_DURATION_SECONDS
+      ? Math.sin((phase / BLINK_DURATION_SECONDS) * Math.PI)
+      : 0;
+
+  influences[blinkIndex] = blinkAmount;
 }
 
 function getMmdMotionFrame(petState: PetState, elapsed: number): MmdMotionFrame {
